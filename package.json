@@ -10,7 +10,8 @@
     "@element-plus/icons-vue": "^2.0.4",
     "core-js": "^3.8.3",
     "element-plus": "^2.2.5",
-    "vue": "^3.2.13"
+    "vue": "^3.2.13",
+    "vue3-menus": "^1.1.2"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~5.0.0",

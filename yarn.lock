@@ -948,7 +948,7 @@
   "resolved" "https://registry.npmmirror.com/@ctrl/tinycolor/-/tinycolor-3.4.1.tgz"
   "version" "3.4.1"
 
-"@element-plus/icons-vue@^2.0.5":
+"@element-plus/icons-vue@^2.0.4", "@element-plus/icons-vue@^2.0.5":
   "integrity" "sha512-jvNWyKcdvPvMDLTWjghrPY+bYHKqh7hbAFIPe+HWR073zilzt33csREzmKx3VwhdlJUW5u0nCqN+0rwI8jlH+w=="
   "resolved" "https://registry.npmmirror.com/@element-plus/icons-vue/-/icons-vue-2.0.5.tgz"
   "version" "2.0.5"
