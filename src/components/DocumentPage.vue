@@ -16,6 +16,54 @@
         <el-table-column prop="disk_next" label="下一块号" width="130" />
       </el-table>
     </el-drawer>
+    <!-- 属性对话框 -->
+    <el-dialog v-model="show_attr" title="属性">
+      <table id="MineTable">
+        <tr>
+          <td>名称</td>
+
+          <td>{{ this.cur_dir[this.selected_index].name }}</td>
+        </tr>
+        <tr>
+          <td>最后修改时间</td>
+
+          <td>{{ this.cur_dir[this.selected_index].last_edit_timestr }}</td>
+        </tr>
+        <tr>
+          <td>类型</td>
+
+          <td>
+            {{
+              this.cur_dir[this.selected_index].type == 0
+                ? "文件夹"
+                : this.cur_dir[this.selected_index].type == 1
+                ? "文件"
+                : "磁盘"
+            }}
+          </td>
+        </tr>
+        <tr v-if="this.cur_dir[this.selected_index].type == 1">
+          <td>大小</td>
+
+          <td>{{ this.cur_dir[this.selected_index].size + " KB" }}</td>
+        </tr>
+        <tr>
+          <td>路径</td>
+
+          <td>{{ this.cur_dir[this.selected_index].path }}</td>
+        </tr>
+        <tr v-if="this.cur_dir[this.selected_index].type == 1">
+          <td>起始块号</td>
+
+          <td>{{ this.cur_dir[this.selected_index].p_begin }}</td>
+        </tr>
+        <tr v-if="this.cur_dir[this.selected_index].type == 1">
+          <td>终止块号</td>
+
+          <td>{{ this.cur_dir[this.selected_index].p_end }}</td>
+        </tr>
+      </table>
+    </el-dialog>
     <!-- 新建文件夹对话框 -->
     <el-dialog v-model="show_dialog" title="新建文件(夹)">
       <el-form :model="new_doc_name">
@@ -26,7 +74,17 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="show_dialog = false">取消</el-button>
-          <el-button type="primary" @click="addDoc">确定</el-button>
+          <el-button type="primary" @click="addDoc">确认</el-button>
+        </span>
+      </template>
+    </el-dialog>
+    <!-- 删除文件夹/格式化对话框 -->
+    <el-dialog v-model="show_delete" title="确认">
+      <span>"确认要删除文件(夹)/格式化磁盘吗？此操作不可逆！"</span>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="show_delete = false">取消</el-button>
+          <el-button type="primary" @click="delete_Check">确认</el-button>
         </span>
       </template>
     </el-dialog>
@@ -49,7 +107,7 @@
       </el-header>
       <el-main class="main">
         <div class="OperationField">
-          <el-button-group class="ml-4">
+          <el-button-group class="ml-4 MineIconGroup" style="">
             <el-button
               type="primary"
               plain
@@ -75,6 +133,15 @@
               ><el-icon><Files /></el-icon
             ></el-button>
           </el-button-group>
+          <span class="mt-4 MineSearch">
+            <el-input v-model="search_path" class="input-with-select">
+              <template #append>
+                <el-button @click="this.toPath">
+                  <el-icon><ArrowRightBold /></el-icon>
+                </el-button>
+              </template>
+            </el-input>
+          </span>
         </div>
         <div class="PageField">
           <el-table :data="cur_dir" style="width: 100%">
@@ -122,7 +189,18 @@ import { menusEvent } from "vue3-menus";
 import { ElNotification } from "element-plus";
 import { ElMessage } from "element-plus";
 export default {
-  components: {},
+  watch: {
+    cur_path: {
+      handler(val) {
+        this.search_path = "";
+        for (let i = 0; i < val.length; ++i) {
+          this.search_path += val[i] + "\\";
+        }
+      },
+      deep: true,
+      immediate: true,
+    },
+  },
   data() {
     return {
       /*主要配置*/
@@ -139,7 +217,7 @@ export default {
           type: 2,
           size: "64",
           used_space: "",
-          layer: 0,
+          path: "",
           children: [],
           p_begin: -1, //非文件类型不需要设置此项
           p_end: -1, //非文件类型不需要设置此项
@@ -158,6 +236,8 @@ export default {
       //在此模拟外部的硬盘，在created钩子中初始化
       physical_disk: [],
       /*对话框配置 */
+      //路径跳转
+      search_path: "",
       //新建文件
       show_dialog: false,
       new_doc_name: "",
@@ -171,8 +251,12 @@ export default {
       open_doc_index: -1,
       save_doc_time: -1,
       save_doc_timestr: -1,
+      //确认删除
+      show_delete: false,
       /*磁盘页面配置*/
       show_drawer: false,
+      //属性页面
+      show_attr: false,
       /*资源文件目录*/
       icon_urls: [
         require("../assets/folder.png"),
@@ -186,21 +270,15 @@ export default {
           label: "属性",
           tip: "",
           click: () => {
-            console.log(this.cur_dir[this.selected_index].size);
+            this.show_attr = true;
           },
         },
         {
           label: "删除/格式化",
           tip: "删除文件夹/格式化磁盘",
           click: () => {
-            this.deleteFile(this.cur_dir[this.selected_index].type);
+            this.show_delete = true;
           },
-        },
-        {
-          label: "重新加载(R)",
-          tip: "Ctrl+R",
-          click: () => {},
-          divided: true,
         },
       ],
     };
@@ -227,16 +305,22 @@ export default {
       for (let i = 0; i < this.cur_path.length - 1; ++i) {
         //这里的j是为了遍历每一层的子结点
         for (let j = 0; j < dir.length; ++j) {
-          if (dir[j].name == this.cur_path[i]) {
+          if (dir[j].name == this.cur_path[i] && dir[j].type != 1) {
             //一定可以找到一个结点
+
             dir = dir[j].children; //dir定位到前一层
           }
         }
       }
       //查询当前层哪个结点为要添加结点的父节点
       let index = -1;
+      console.log(222222);
+      console.log(dir);
       for (let i = 0; i < dir.length; ++i) {
-        if (dir[i].name == this.cur_path[this.cur_path.length - 1]) {
+        if (
+          dir[i].name == this.cur_path[this.cur_path.length - 1] &&
+          (dir[i].type == 2 || dir[i].type == 0)
+        ) {
           index = i;
         }
       }
@@ -274,7 +358,7 @@ export default {
         }
         let doc_size = 0;
         if (this.new_doc_type == 0) {
-          doc_size = "请在属性查看";
+          doc_size = "-";
         }
         dir[index].children.push({
           name: this.new_doc_name,
@@ -282,7 +366,7 @@ export default {
           last_edit_time: this.new_doc_time,
           type: this.new_doc_type,
           size: doc_size,
-          path: new_doc_path + this.new_doc_name,
+          path: new_doc_path,
           children: [],
           p_begin: -1, //非文件类型不需要设置此项
           p_end: -1, //非文件类型不需要设置此项
@@ -303,6 +387,7 @@ export default {
       });
       return;
     },
+
     //输入新文件夹信息
     setNewFolder(type) {
       let a = new Date().toLocaleDateString();
@@ -365,6 +450,9 @@ export default {
           this.cur_dir[this.open_doc_index].p_begin,
           this.cur_dir[this.open_doc_index].p_end
         );
+        //修改目录项
+        this.cur_dir[this.open_doc_index].p_begin = -1;
+        this.cur_dir[this.open_doc_index].p_end = -1;
       }
       let size = this.open_doc_content.length; //假设1个字符占1个字节
       let block_size = this.disk_bitmap[0].bolck_size;
@@ -425,51 +513,96 @@ export default {
       }
     },
     //删除文件/格式化磁盘
-    deleteFile(type) {
-      //删除文件
-      if (type == 1) {
-        if (this.cur_dir[this.selected_index].p_begin != -1) {
-          this.deleteFromDisk(
-            this.cur_dir[this.selected_index].p_begin,
-            this.cur_dir[this.selected_index].p_end
-          );
-        }
-        let dir = this.totol_dir; //保存当前层的情况
-        //这里的i相当于深度
-        for (let i = 0; i < this.cur_path.length - 1; ++i) {
-          //这里的j是为了遍历每一层的子结点
-          for (let j = 0; j < dir.length; ++j) {
-            if (dir[j].name == this.cur_path[i]) {
-              //一定可以找到一个结点
-              dir = dir[j].children; //dir定位到前一层
-            }
-          }
-        }
-        //查询当前层哪个结点为要添加结点的父节点
-        let index = -1;
-        for (let i = 0; i < dir.length; ++i) {
-          if (dir[i].name == this.cur_path[this.cur_path.length - 1]) {
-            index = i;
-          }
-        }
-        for (let i = 0; i < dir[index].children.length; ++i) {
-          if (
-            dir[index].children[i].name ==
-              this.cur_dir[this.selected_index].name &&
-            dir[index].children[i].type ==
-              this.cur_dir[this.selected_index].type
-          ) {
-            dir[index].children.splice(i, 1);
-            this.cur_dir = [].concat(dir[index].children); //更新目录
-            ElMessage({
-              message: "文件已删除！",
-              type: "success",
-            });
-            return;
+    deleteFile(type, delete_doc_path,delete_doc_name) {
+      console.log(delete_doc_path + " " + type);
+      /*确定delete_index，delete_cur_path,delete_cur_dir*/
+      let delete_cur_path = delete_doc_path.split("\\"); //转为数组
+      delete_cur_path.pop();
+      let dir = this.totol_dir; //保存当前层的情况
+      //这里的i相当于深度
+      for (let i = 0; i < delete_cur_path.length - 1; ++i) {
+        //这里的j是为了遍历每一层的子结点
+        for (let j = 0; j < dir.length; ++j) {
+          if (dir[j].name == delete_cur_path[i] && dir[j].type != 1) {
+            //一定可以找到一个结点
+            dir = dir[j].children; //dir定位到前一层
           }
         }
       }
+      //查询当前层哪个结点为要删除结点的父节点
+      let index = -1;
+      for (let i = 0; i < dir.length; ++i) {
+        if (
+          dir[i].name == delete_cur_path[delete_cur_path.length - 1] &&
+          dir[i].type != 1
+        ) {
+          index = i;
+        }
+      }
+      let delete_cur_dir = [].concat(dir[index].children); //确定cur_dir
+      if (index == -1) {
+        alert(-1);
+        return;
+      }
+      let delete_index = -1;
+      //确定selected_index
+      for (let i = 0; i < delete_cur_dir.length; ++i) {
+        if (
+          delete_cur_dir[i].name == delete_doc_name &&
+          delete_cur_dir[i].type == type
+        ) {
+          delete_index = i;
+          break;
+        }
+      }
+      if (delete_index == -1) {
+        alert("delete_index=" + "-1!");
+      }
+      /*开始删除文件*/
+      if (type == 1) {
+        if (delete_cur_dir[delete_index].p_begin != -1) {
+          this.deleteFromDisk(
+            delete_cur_dir[delete_index].p_begin,
+            delete_cur_dir[delete_index].p_end
+          );
+        }
+        for (let i = 0; i < dir[index].children.length; ++i) {
+          if (
+            dir[index].children[i].name == delete_cur_dir[delete_index].name &&
+            dir[index].children[i].type == delete_cur_dir[delete_index].type
+          ) {
+            dir[index].children.splice(i, 1);
+            this.cur_dir = [].concat(dir[index].children); //更新目录
+
+            return;
+          }
+        }
+      } else if (type == 0) {
+        //删除文件夹
+        let i = 0;
+        while (i < delete_cur_dir[delete_index].children.length) {
+          this.deleteFile(
+            delete_cur_dir[delete_index].children[0].type,
+            delete_cur_dir[delete_index].children[0].path,
+            delete_cur_dir[delete_index].children[0].name
+          );
+        }
+        for (let i = 0; i < dir[index].children.length; ++i) {
+          if (
+            dir[index].children[i].name == delete_doc_name &&
+            dir[index].children[i].type == 0
+          ) {
+            dir[index].children.splice(i, 1);
+            this.cur_dir = [].concat(dir[index].children);
+
+            break;
+          }
+        }
+
+        return;
+      }
     },
+
     //从磁盘上删除数据、更改文件指针
     deleteFromDisk(p_begin, p_end) {
       if (p_begin == -1) {
@@ -490,9 +623,9 @@ export default {
         this.physical_disk[p_cur].disk_next = -1;
         p_cur = p_next;
       }
-      //修改目录项
-      this.cur_dir[this.open_doc_index].p_begin = -1;
-      this.cur_dir[this.open_doc_index].p_end = -1;
+      // //修改目录项
+      // this.cur_dir[this.open_doc_index].p_begin = -1;
+      // this.cur_dir[this.open_doc_index].p_end = -1;
       //改位图
       let new_bitmap = "";
       for (let i = 0; i < this.disk_bitmap[0].bitmap.length; ++i) {
@@ -504,6 +637,59 @@ export default {
       }
       this.disk_bitmap[0].bitmap = new_bitmap;
       console.log(new_bitmap);
+    },
+    //磁盘格式化
+    disk_Formmat() {
+      (this.totol_dir = [
+        {
+          name: "Data(D:)",
+          last_edit_timestr: "2001/10/23",
+          last_edit_time: -1,
+          type: 2,
+          size: "64",
+          used_space: "",
+          path: "",
+          children: [],
+          p_begin: -1, //非文件类型不需要设置此项
+          p_end: -1, //非文件类型不需要设置此项
+        },
+      ]),
+        //一个磁盘64 KB，分为128块，每块大小为 512 B
+        (this.disk_bitmap = [
+          {
+            disk: "D",
+            bolck_size: 512,
+            block_free_num: 512,
+            bitmap:
+              "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          },
+        ]),
+        (this.physical_disk = []);
+      this.cur_dir = [];
+      this.cur_dir.push(this.totol_dir[0]); //初始化当前目录
+      this.cur_path = [];
+      this.physicalDiskInit();
+    },
+    //删除文件对话框
+    delete_Check() {
+      if (this.cur_dir[this.selected_index].type == 2) {
+        this.disk_Formmat();
+        ElMessage({
+          message: "磁盘已格式化！",
+          type: "success",
+        });
+      } else {
+        this.deleteFile(
+          this.cur_dir[this.selected_index].type,
+          this.cur_dir[this.selected_index].path,
+          this.cur_dir[this.selected_index].name
+        );
+        ElMessage({
+          message: "文件(夹)已删除！",
+          type: "success",
+        });
+      }
+      this.show_delete = false;
     },
     /*点击操作配置*/
     //双击操作配置
@@ -545,7 +731,7 @@ export default {
       for (let i = 0; i < this.cur_path.length; ++i) {
         //这里的j是为了遍历每一层的子结点
         for (let j = 0; j < dir.length; ++j) {
-          if (dir[j].name == this.cur_path[i]) {
+          if (dir[j].name == this.cur_path[i] && dir[j].type != 1) {
             //一定可以找到一个结点
             dir = [].concat(dir[j].children);
           }
@@ -553,14 +739,46 @@ export default {
       }
       this.cur_dir = [].concat(dir);
     },
+    //路径跳转
+    toPath() {
+      let to_path_Ary = this.search_path.split("\\");
+      let dir = [].concat(this.totol_dir);
+      to_path_Ary.pop();
+      console.log(dir);
+
+      console.log(to_path_Ary);
+      for (let i = 0; i < to_path_Ary.length; ++i) {
+        for (let j = 0; j < dir.length; ++j) {
+          if (
+            dir[j].name == to_path_Ary[i] &&
+            (dir[j].type == 2 || dir[j].type == 0)
+          ) {
+            dir = [].concat(dir[j].children);
+            if (i == to_path_Ary.length - 1) {
+              this.cur_dir = [].concat(dir);
+              this.cur_path = [].concat(to_path_Ary);
+              return true;
+            }
+            break;
+          }
+        }
+      }
+      ElMessage.error("路径非法或不存在！(注意末尾需要加\\)");
+      this.search_path = "";
+      for (let i = 0; i < this.cur_path.length; ++i) {
+        this.search_path += this.cur_path[i] + "\\";
+      }
+      return false;
+    },
   },
   created() {
     this.physicalDiskInit(); //初始化硬盘
-    // if (localStorage.length != 0) {
-    //   this.totol_dir = JSON.parse(localStorage.getItem("total_dir"));
-    //   this.physical_disk = JSON.parse(localStorage.getItem("physical_disk"));
-    //   this.disk_bitmap = JSON.parse(localStorage.getItem("disk_bitmap"));
-    // }
+    if (localStorage.length != 0) {
+      this.totol_dir = JSON.parse(localStorage.getItem("total_dir"));
+      this.physical_disk = JSON.parse(localStorage.getItem("physical_disk"));
+      this.disk_bitmap = JSON.parse(localStorage.getItem("disk_bitmap"));
+    }
+    this.cur_dir = [];
     this.cur_dir.push(this.totol_dir[0]); //初始化当前目录
   },
   mounted() {
@@ -582,25 +800,44 @@ export default {
     ElNotification({
       title: "请使用同一浏览器",
       message:
-        "使用同一浏览器打开，即可自动恢复上次编辑后的资源目录(窗口10s后自动关闭)",
+        "使用同一浏览器打开，即可自动恢复上次编辑后的资源目录。关闭浏览器时无需在意浏览器提示，选择离开即可",
       type: "info",
-      duration: 10000,
+      duration: 5000,
     });
     setTimeout(
       () =>
         ElNotification({
           title: "右击操作",
-          message: "鼠标右击文件名称或图标可打开编辑菜单(窗口10s后自动关闭)",
+          message: "鼠标右击文件名称或图标可打开编辑菜单",
           type: "info",
-          duration: 10000,
+          duration: 5000,
         }),
       1000
+    );
+    setTimeout(
+      () =>
+        ElNotification({
+          title: "双击操作",
+          message: "鼠标双击文件名称或图标可打开文件(夹)",
+          type: "info",
+          duration: 5000,
+        }),
+      2000
     );
   },
 };
 </script>
 
 <style scoped>
+.MineSearch {
+  margin-left: 10px;
+  margin-top: 4px;
+  width: 80%;
+}
+.MineIconGroup {
+  margin-left: 10px;
+  margin-top: 4px;
+}
 .MineIcon {
   width: 30px;
   height: 30px;
@@ -626,6 +863,7 @@ export default {
   border-radius: 10px;
 }
 .OperationField {
+  display: flex;
   background-color: white;
   margin-bottom: 10px;
   height: 40px;
@@ -639,5 +877,8 @@ export default {
 }
 #DrawerButton {
   right: 15px;
+}
+#MineTable td {
+  text-align: left;
 }
 </style>
