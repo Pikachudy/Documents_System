@@ -33,7 +33,7 @@
 
 ### 项目浏览
 
-+ 联网进入[[documents_system (pikachudy.github.io)](https://pikachudy.github.io/Documents_System/)](https://pikachudy.github.io/OS_MemoryScheduling/)在线浏览
++ 联网进入[[documents_system (pikachudy.github.io)](https://pikachudy.github.io/Documents_System/)](https://pikachudy.github.io/Documents_System/)在线浏览
 
 + 解压**dist**文件，在根目录下找到 **index.html** ,使用浏览器打开即可本地浏览
 
