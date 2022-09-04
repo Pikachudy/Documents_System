@@ -5481,6 +5481,11 @@
     "@vue/server-renderer" "3.2.37"
     "@vue/shared" "3.2.37"
 
+"vue3-menus@^1.1.2":
+  "integrity" "sha512-MoX87TH25fbKmmE8PwC+c2kJOSGJheP4pBR2we0RkOrfUDQg7sK+akAZSmQU8o+7dF+xVF2NfKPhoVHOhlX9wQ=="
+  "resolved" "https://registry.npmmirror.com/vue3-menus/-/vue3-menus-1.1.2.tgz"
+  "version" "1.1.2"
+
 "watchpack@^2.3.1":
   "integrity" "sha512-Lcvm7MGST/4fup+ifyKi2hjyIAwcdI4HRgtvTpIUxBRhB+RFtUh8XtDOxUfctVCnhVi+QQj49i91OyvzkJl6cg=="
   "resolved" "https://registry.npmjs.org/watchpack/-/watchpack-2.4.0.tgz"
